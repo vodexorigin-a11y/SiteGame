@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>PS1 ZOMBIE PRO + SKINS ONLINE (PeerJS)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script> 
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        body { margin: 0; overflow: hidden; background: #000; touch-action: none; font-family: 'VT323', monospace; user-select: none; }
+        canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+        
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #damage-overlay { 
+            position: absolute; top:0; left:0; width:100%; height:100%; 
+            background: red; opacity: 0; pointer-events: none; transition: opacity 0.1s;
+        }
+
+        .hud-text { position: absolute; color: #0f0; font-size: 24px; text-shadow: 2px 2px 0 #000; }
+        #health { bottom: 20px; left: 20px; font-size: 32px; color: #f00; }
+        #ammo { bottom: 20px; right: 20px; font-size: 32px; color: #ff0; }
+        #wave-info { top: 20px; left: 20px; }
+        #money { top: 20px; right: 20px; color: gold; font-size: 32px; }
+        #p2p-status { top: 60px; left: 50%; transform: translateX(-50%); color: cyan; font-size: 20px; opacity: 0.8; text-shadow: 2px 2px #000; }
+        
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; 
+            background: #0f0; transform: translate(-50%, -50%); border: 1px solid #000; opacity: 0.7;
+        }
+
+        #shop-msg, #online-msg { 
+            position: absolute; top: 40%; width: 100%; text-align: center; 
+            color: white; font-size: 24px; opacity: 0; transition: opacity 0.5s; text-shadow: 2px 2px 0 #000;
+        }
+
+        /* Shop Menu (Оставлен без изменений) */
+        #shop-menu {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); border: 2px solid #fff; padding: 20px;
+            display: none; flex-direction: column; gap: 10px; pointer-events: auto;
+            width: 350px; 
+        }
+        .shop-tabs { display: flex; justify-content: space-around; margin-bottom: 15px; }
+        .shop-tab { padding: 5px 10px; cursor: pointer; border: 1px solid #555; background: #222; color: #fff; }
+        .shop-tab.active { background: #555; border-color: #fff; }
+
+        .shop-item {
+            background: #333; color: #fff; border: 1px solid #555; padding: 10px;
+            cursor: pointer; text-align: center; font-size: 20px;
+        }
+        .shop-item.locked { color: #aaa; }
+        .shop-item.owned { color: #0f0; border-color: #0f0; }
+        .shop-content { display: none; }
+        .shop-content.active { display: flex; flex-direction: column; gap: 10px; }
+
+        .control-area { position: absolute; pointer-events: auto; }
+        #joystick-zone { bottom: 50px; left: 50px; width: 120px; height: 120px; border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; }
+        #joystick-knob { width: 40px; height: 40px; background: rgba(255,255,255,0.5); border-radius: 50%; position: absolute; top: 40px; left: 40px; pointer-events: none;}
+        
+        .btn { 
+            position: absolute; width: 70px; height: 70px; background: rgba(0,0,0,0.5); 
+            border: 2px solid #fff; border-radius: 50%; color: #fff; 
+            display: flex; justify-content: center; align-items: center; font-size: 16px; pointer-events: auto;
+            touch-action: none;
+        }
+        .btn:active { background: rgba(255,255,255,0.3); }
+
+        #btn-fire { bottom: 60px; right: 40px; width: 90px; height: 90px; background: rgba(255,0,0,0.3); border-color: #f00; }
+        #btn-jump { bottom: 170px; right: 50px; }
+        #btn-switch { bottom: 60px; right: 150px; }
+        #btn-reload { bottom: 170px; right: 140px; font-size: 14px; }
+        #btn-shop { top: 80px; right: 20px; width: 50px; height: 50px; font-size: 14px; border-radius: 5px; }
+
+        #menu { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #111; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 10; pointer-events: auto;
+        }
+        h1 { color: #f00; font-size: 60px; text-shadow: 4px 4px #000; margin: 0; letter-spacing: 5px; }
+        .menu-btn-group { display: flex; gap: 20px; margin-top: 30px; }
+        .menu-btn { 
+            padding: 15px 40px; font-family: 'VT323'; font-size: 30px; 
+            background: #333; color: #fff; border: 2px solid #fff; cursor: pointer; 
+        }
+
+        /* --- НОВОЕ: СЕТЕВОЕ МЕНЮ --- */
+        #connect-menu { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.95); display: none; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 11; pointer-events: auto;
+        }
+        .code-display { font-size: 60px; color: lime; border: 2px dashed lime; padding: 10px; margin: 20px; letter-spacing: 5px; }
+        .code-input { font-size: 40px; width: 200px; text-align: center; background: #000; color: lime; border: 2px solid lime; font-family: 'VT323'; margin: 20px; }
+        .status-text { color: yellow; font-size: 24px; margin-bottom: 20px; height: 30px; }
+    </style>
+</head>
+<body>
+
+    <div id="menu">
+        <h1>Z-BUNNY: PRO</h1>
+        <div style="color: #888; margin-top: 10px;">EARN MONEY - BUY GUNS - LOOT HOUSES</div>
+        <div class="menu-btn-group">
+            <button class="menu-btn" id="start-single-btn">ОДИНОЧНАЯ ИГРА</button>
+            <button class="menu-btn" id="start-online-btn">ОНЛАЙН (КООП)</button>
+        </div>
+    </div>
+
+    <div id="connect-menu">
+        <h2 style="color:white; font-size:40px;">КООПЕРАТИВ</h2>
+        <div class="status-text" id="conn-status">...</div>
+        
+        <div id="host-panel" style="text-align:center; display:none;">
+            <div style="color:#aaa;">КОД ДЛЯ ДРУГА:</div>
+            <div id="my-code" class="code-display">...</div>
+            <div style="color:#555;">Ожидание подключения...</div>
+            <button class="menu-btn" onclick="resetMenu()" style="font-size:20px; margin-top:20px;">ОТМЕНА</button>
+        </div>
+
+        <div id="join-panel" style="text-align:center; display:none;">
+            <div style="color:#aaa;">ВВЕДИ КОД ДРУГА:</div>
+            <input type="number" id="friend-code" class="code-input" placeholder="0000">
+            <br>
+            <button class="menu-btn" id="confirm-join-btn">ПОДКЛЮЧИТЬСЯ</button>
+            <br>
+            <button class="menu-btn" onclick="resetMenu()" style="font-size:20px; margin-top:20px;">НАЗАД</button>
+        </div>
+
+        <div id="role-select">
+            <button class="menu-btn" onclick="initHost()">СОЗДАТЬ ИГРУ (ХОСТ)</button>
+            <button class="menu-btn" onclick="initJoin()">ВОЙТИ (КЛИЕНТ)</button>
+            <br>
+            <button class="menu-btn" onclick="backToMain()" style="background:#555; margin-top:20px;">НАЗАД В МЕНЮ</button>
+        </div>
+    </div>
+    <div id="ui-layer" style="display:none;">
+        <div id="damage-overlay"></div>
+        <div id="crosshair"></div>
+        <div id="wave-info" class="hud-text">WAVE: 1</div>
+        <div id="money" class="hud-text">$0</div>
+        <div id="shop-msg"></div>
+        <div id="online-msg"></div>
+        <div id="p2p-status" class="hud-text"></div> <div id="health" class="hud-text">HP: 100</div>
+        <div id="ammo" class="hud-text">--</div>
+
+        <div id="shop-menu">
+            <div style="text-align:center; color:gold; margin-bottom:10px;">SHOP</div>
+            <div class="shop-tabs">
+                <div class="shop-tab active" data-tab="weapons">WEAPONS</div>
+                <div class="shop-tab" data-tab="skins">SKINS (CHAR)</div>
+                <div class="shop-tab" data-tab="wskins">WEAPON SKINS</div>
+            </div>
+
+            <div id="weapons-content" class="shop-content active">
+                <div id="shop-items"></div>
+            </div>
+            
+            <div id="skins-content" class="shop-content">
+                <div id="skin-items"></div>
+            </div>
+
+            <div id="wskins-content" class="shop-content">
+                <div id="wskin-items"></div>
+            </div>
+
+            <button id="close-shop" style="margin-top:10px;">CLOSE</button>
+        </div>
+
+        <div id="joystick-zone" class="control-area">
+            <div id="joystick-knob"></div>
+        </div>
+        
+        <div id="btn-shop" class="btn">SHOP</div>
+        <div id="btn-switch" class="btn">SWAP</div>
+        <div id="btn-reload" class="btn">RELOAD</div>
+        <div id="btn-jump" class="btn">JUMP</div>
+        <div id="btn-fire" class="btn">SHOOT</div>
+    </div>
+
+<script>
+    // --- AUDIO SYSTEM (не тронут) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(type) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        osc.connect(filter); filter.connect(gainNode); gainNode.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+
+        if (type === 'shoot_silenced') {
+            const bSize = audioCtx.sampleRate * 0.1; const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+            const d = buf.getChannelData(0); for (let i = 0; i < bSize; i++) d[i] = Math.random() * 2 - 1;
+            const n = audioCtx.createBufferSource(); n.buffer = buf;
+            const nf = audioCtx.createBiquadFilter(); nf.type = 'lowpass'; nf.frequency.value = 1000;
+            const ng = audioCtx.createGain(); ng.gain.setValueAtTime(0.5, now); ng.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            n.connect(nf); nf.connect(ng); ng.connect(audioCtx.destination); n.start();
+        } else if (type === 'shoot_loud') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.2);
+            filter.type = 'lowpass'; filter.frequency.setValueAtTime(3000, now); filter.frequency.linearRampToValueAtTime(100, now + 0.15);
+            gainNode.gain.setValueAtTime(0.5, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(); osc.stop(now + 0.2);
+        } else if (type === 'knife' || type === 'pick') {
+            const bSize = audioCtx.sampleRate * 0.1; const buf = audioCtx.createBuffer(1, bSize, audioCtx.sampleRate);
+            const d = buf.getChannelData(0); for (let i = 0; i < bSize; i++) d[i] = Math.random() * 2 - 1;
+            const n = audioCtx.createBufferSource(); n.buffer = buf;
+            const f = audioCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.setValueAtTime(type==='knife'?400:600, now); f.frequency.linearRampToValueAtTime(type==='knife'?1200:1000, now + 0.1);
+            const g = audioCtx.createGain(); g.gain.setValueAtTime(0.3, now); g.gain.linearRampToValueAtTime(0, now + 0.1);
+            n.connect(f); f.connect(g); g.connect(audioCtx.destination); n.start();
+        } else if (type === 'zombie') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(80, now); osc.frequency.linearRampToValueAtTime(60, now + 0.5);
+            gainNode.gain.setValueAtTime(0, now); gainNode.gain.linearRampToValueAtTime(0.2, now + 0.1); gainNode.gain.linearRampToValueAtTime(0, now + 0.6);
+            osc.start(); osc.stop(now + 0.6);
+        }
+    }
+
+    // --- GAME ENGINE ---
+    const CFG = { width: 320, height: 240, fov: 75, sens: 0.005, speed: 0.12, jumpForce: 0.25, gravity: 0.015, airControl: 0.02 };
+
+    let camera, scene, renderer, clock;
+    let player = { hp: 100, money: 0, velocity: new THREE.Vector3(), onGround: false, canShoot: true, isReloading: false, reloadTimer: 0, reloadDuration: 1.5, currentSkin: 0, localModel: null }; 
+    let weapons = []; let currentWeaponIdx = 0;
+    let zombies = []; let particles = []; let obstacles = []; let pickups = [];
+    let wave = 1; let spawnRate = 2000; let lastSpawn = 0;
+    let isPlaying = false; let killCount = 0; let lastMoan = 0;
+    
+    // --- НОВЫЕ СЕТЕВЫЕ ПЕРЕМЕННЫЕ ---
+    let peer = null;
+    let conn = null;
+    let isHost = false;
+    let isOnline = false;
+    let otherPlayerModel = null; // Переименована для ясности
+    const APP_ID = "zb_v3_pro_"; // Уникальный префикс для PeerJS
+    // --- КОНЕЦ НОВЫХ СЕТЕВЫХ ПЕРЕМЕННЫХ ---
+
+
+    const input = { x: 0, y: 0, lastLookX: 0, lastLookY: 0, fire: false };
+    let joyTouchId = null; let lookTouchId = null;
+
+    // --- СИСТЕМА СКИНОВ И ПЕРЧАТОК (НЕ ТРОНУТА) ---
+    const playerSkins = [
+        { name: "CLASSIC", handColor: 0x443322, gloveColor: 0x333333, price: 0, owned: true },
+        { name: "TACTICAL", handColor: 0x222222, gloveColor: 0x888888, price: 500, owned: false },
+        { name: "NINJA", handColor: 0x000000, gloveColor: 0x111111, price: 1000, owned: false },
+        { name: "FIREFOX", handColor: 0xff8800, gloveColor: 0xaa2200, price: 2000, owned: false }
+    ];
+
+    const weaponSkins = [
+        { id: 0, name: "DEFAULT", color: 0xffffff, price: 0, owned: true, weapon: "USP-S" },
+        { id: 1, name: "BLUE TIGER", color: 0x0000ff, price: 500, owned: false, weapon: "M4A1-S" },
+        { id: 2, name: "RED LAVA", color: 0xff0000, price: 1000, owned: false, weapon: "AKM" }
+    ];
+
+    const zombieSkins = [
+        { body: 0x224422, head: 0x668866 }, // Classic Green
+        { body: 0x442222, head: 0x886666 }, // Red Rot
+        { body: 0x111111, head: 0x555555 }, // Black ops
+        { body: 0x334411, head: 0x777733 }  // Desert
+    ];
+    // --- КОНЕЦ СИСТЕМЫ СКИНОВ ---
+
+    function init() {
+        renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(0.8); 
+        renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.BasicShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x110505); 
+        scene.fog = new THREE.FogExp2(0x110505, 0.03); 
+
+        camera = new THREE.PerspectiveCamera(CFG.fov, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.rotation.order = 'YXZ'; 
+        
+        const ambient = new THREE.AmbientLight(0x444444);
+        scene.add(ambient);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(20, 30, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        createMap();
+        createWeapons();
+        buildShop();
+        createOtherPlayerModel(); // <-- Создаем модель для другого игрока
+        applyPlayerSkin(player.currentSkin); 
+
+        clock = new THREE.Clock();
+        setupInputs();
+        setupShopTabs(); 
+        setupMainMenu(); 
+        requestAnimationFrame(animate);
+    }
+
+    // Вспомогательная функция для создания кубов (Не тронута)
+    function makeBox(w, h, d, color, x, y, z) {
+        const geo = new THREE.BoxGeometry(w, h, d);
+        const mat = new THREE.MeshLambertMaterial({ color: color, flatShading: true });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        mesh.castShadow = true;
+        return mesh;
+    }
+
+    // --- ОБНОВЛЕННАЯ ФУНКЦИЯ: МОДЕЛЬ ДРУГОГО ИГРОКА ---
+    function createOtherPlayerModel() {
+        const model = new THREE.Group();
+        // Используем куб для "тела", чтобы симулировать, что видит другой игрок
+        model.add(makeBox(0.4, 1.2, 0.3, 0x008800, 0, 1.2, 0)); // Тело
+        model.add(makeBox(0.3, 0.3, 0.3, 0x000088, 0, 2.0, 0)); // Голова (шапка)
+        model.add(makeBox(0.15, 0.8, 0.15, 0x444444, 0.3, 1.5, 0)); // Рука 1
+        model.add(makeBox(0.15, 0.8, 0.15, 0x444444, -0.3, 1.5, 0)); // Рука 2
+        model.add(makeBox(0.2, 0.7, 0.2, 0x333333, 0.15, 0.35, 0)); // Нога 1
+        model.add(makeBox(0.2, 0.7, 0.2, 0x333333, -0.15, 0.35, 0)); // Нога 2
+        
+        scene.add(model);
+        otherPlayerModel = model;
+        otherPlayerModel.position.y = -100; // Скрываем, пока не подключимся
+    }
+    // ВАШИ ФУНКЦИИ applyPlayerSkin, applyWeaponSkin, createWeapons, createMap, createHouse... (Не тронуты)
+    // ...
+    // ... (весь ваш код функций)
+    // ...
+
+    // Функция для применения скина игрока (меняет цвет рук и перчаток) - (Не тронута, добавлено обновление otherPlayerModel)
+    function applyPlayerSkin(skinIndex) {
+        const skin = playerSkins[skinIndex];
+        const handColor = skin.handColor;
+        const gloveColor = skin.gloveColor;
+        
+        weapons.forEach(w => {
+            w.traverse(child => {
+                if (child.isMesh && child.userData.type === 'hand') {
+                     child.material.color.setHex(handColor);
+                }
+                if (child.isMesh && child.userData.type === 'glove') {
+                     child.material.color.setHex(gloveColor);
+                }
+            });
+        });
+
+        // Обновляем модель ДРУГОГО игрока
+        if (otherPlayerModel) {
+            // Условное изменение цвета "рук" на модели
+            otherPlayerModel.children.forEach(child => {
+                 if (child.isMesh && child.geometry.parameters.height === 0.8) { 
+                     child.material.color.setHex(handColor);
+                 }
+                 // Дополнительно меняем цвет "Тела" на основе скина (для разнообразия)
+                 if (child.isMesh && child.geometry.parameters.height === 1.2) { 
+                     child.material.color.setHex(handColor);
+                 }
+            });
+        }
+
+        player.currentSkin = skinIndex;
+        showMsg(`SKIN: ${skin.name} APPLIED`);
+    }
+    
+    // ВАШИ ФУНКЦИИ (createWeapons, createMap, createHouse) - (Не тронуты)
+    function createWeapons() { /* ВАШ КОД */ 
+        const defaultSkin = playerSkins[player.currentSkin];
+        const handColor = defaultSkin.handColor;
+        const gloveColor = defaultSkin.gloveColor
+        
+        const handGroup = new THREE.Group();
+        camera.add(handGroup); handGroup.position.set(0.2, -0.3, -0.5);
+        player.hand = handGroup; scene.add(camera);
+
+        // Helper для создания руки с перчаткой
+        function createHand(w, h, d, color, x, y, z, rotY = 0) {
+            const arm = makeBox(w, h, d, color, x, y, z); 
+            arm.userData.type = 'hand'; 
+            arm.rotation.y = rotY;
+
+            // Добавляем перчатку
+            const glove = makeBox(w+0.02, h+0.02, 0.1, gloveColor, x, y, z + d/2 + 0.05); 
+            glove.userData.type = 'glove';
+            glove.rotation.y = rotY;
+
+            const group = new THREE.Group(); 
+            group.add(arm, glove);
+            return group;
+        }
+
+        // 0. KNIFE
+        const knife = new THREE.Group();
+        knife.add(makeBox(0.05, 0.05, 0.15, 0x222222, 0, 0, 0));
+        knife.add(makeBox(0.02, 0.08, 0.25, 0xaaaaaa, 0, 0.02, -0.2));
+        knife.add(createHand(0.08, 0.08, 0.5, handColor, 0.1, -0.1, 0.3));
+        knife.userData = { name: "KNIFE", dmg: 40, rate: 400, range: 2, type: 'melee', price: 0, owned: true, sound: 'knife' };
+        
+        // 1. USP (УЛУЧШЕННАЯ МОДЕЛЬ ДЛЯ ЛУЧШЕГО ОБХВАТА)
+        const usp = new THREE.Group();
+        // Рама и затвор
+        usp.add(makeBox(0.05, 0.12, 0.06, 0x111111, 0, -0.05, 0.05)); 
+        usp.add(makeBox(0.06, 0.06, 0.25, 0x333333, 0, 0.04, -0.05));
+        // Глушитель
+        const sil = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.15, 8), new THREE.MeshLambertMaterial({color:0x111111}));
+        sil.rotation.x = Math.PI/2; sil.position.set(0, 0.05, -0.25); usp.add(sil);
+        
+        // Правая рука (немного смещаем для лучшего вида)
+        const mainHand = createHand(0.08, 0.08, 0.5, handColor, 0.1, -0.15, 0.3); // Уменьшил Y для низкого хвата
+        usp.add(mainHand);
+        
+        // Левая рука (Поддержка) - просто кубик, чтобы создать видимость обхвата
+        const supportHand = makeBox(0.08, 0.08, 0.3, handColor, 0.08, -0.05, -0.1); 
+        supportHand.userData.type = 'hand'; 
+        usp.add(supportHand);
+        // Перчатка для поддержки
+        const supportGlove = makeBox(0.08, 0.1, 0.08, gloveColor, 0.08, -0.05, 0.0); 
+        supportGlove.userData.type = 'glove';
+        usp.add(supportGlove);
+
+        usp.userData = { name: "USP-S", dmg: 20, rate: 200, range: 50, type: 'gun', ammo: 12, maxAmmo: 12, reloadTime: 1.5, price: 0, owned: true, sound: 'shoot_silenced' };
+
+        // 2. M4A1
+        const m4 = new THREE.Group();
+        m4.add(makeBox(0.06, 0.08, 0.25, 0x222222, 0, 0, 0)); 
+        m4.mag = makeBox(0.04, 0.15, 0.06, 0x333333, 0, -0.1, -0.1); m4.mag.rotation.x = 0.2; m4.add(m4.mag);
+        m4.add(makeBox(0.02, 0.05, 0.15, 0x222222, 0, 0.065, -0.05));
+        const m4Sil = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 8), new THREE.MeshLambertMaterial({color:0x111111}));
+        m4Sil.rotation.x = Math.PI/2; m4Sil.position.set(0, 0.02, -0.55); m4.add(m4Sil);
+        const m4Hg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.25, 6), new THREE.MeshLambertMaterial({color:0x111111}));
+        m4Hg.rotation.x = Math.PI/2; m4Hg.position.set(0, 0.02, -0.25); m4.add(m4Hg);
+        m4.add(makeBox(0.05, 0.08, 0.2, 0x111111, 0, -0.02, 0.22));
+        m4.add(createHand(0.08, 0.08, 0.5, handColor, 0.15, -0.1, 0.2)); // Правая рука
+        m4.add(createHand(0.08, 0.08, 0.5, handColor, -0.15, -0.05, -0.1, -0.5)); // Левая рука
+        m4.userData = { name: "M4A1-S", dmg: 30, rate: 100, range: 80, type: 'gun', ammo: 30, maxAmmo: 30, reloadTime: 2.0, price: 0, owned: true, sound: 'shoot_silenced' };
+
+        // 3. DEAGLE
+        const deagle = new THREE.Group();
+        deagle.add(makeBox(0.06, 0.13, 0.07, 0x222222, 0, -0.05, 0.05)); deagle.add(makeBox(0.07, 0.08, 0.3, 0xcccccc, 0, 0.06, -0.05));
+        deagle.add(createHand(0.08, 0.08, 0.6, handColor, 0.1, -0.1, 0.3)); // Правая рука
+        deagle.userData = { name: "DEAGLE", dmg: 80, rate: 400, range: 60, type: 'gun', ammo: 7, maxAmmo: 7, reloadTime: 2.0, price: 800, owned: false, sound: 'shoot_loud' };
+
+        // 4. AKM
+        const ak = new THREE.Group();
+        ak.add(makeBox(0.06, 0.08, 0.3, 0x222222, 0, 0, 0)); ak.add(makeBox(0.05, 0.08, 0.25, 0x8b4513, 0, -0.02, 0.25));
+        ak.add(makeBox(0.05, 0.06, 0.15, 0x8b4513, 0, 0.01, -0.25));
+        ak.mag = makeBox(0.04, 0.2, 0.07, 0xcc6600, 0, -0.15, -0.1); ak.mag.rotation.x = 0.4; ak.add(ak.mag);
+        const akB = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 6), new THREE.MeshLambertMaterial({color:0x111111}));
+        akB.rotation.x = Math.PI/2; akB.position.set(0, 0.03, -0.45); ak.add(akB);
+        ak.add(createHand(0.08, 0.08, 0.5, handColor, 0.15, -0.1, 0.2)); // Правая рука
+        ak.add(createHand(0.08, 0.08, 0.5, handColor, -0.15, -0.05, -0.1, -0.5)); // Левая рука
+        ak.userData = { name: "AKM", dmg: 45, rate: 120, range: 90, type: 'gun', ammo: 30, maxAmmo: 30, reloadTime: 2.5, price: 1500, owned: false, sound: 'shoot_loud' };
+
+        // 5. AWP
+        const awp = new THREE.Group();
+        awp.add(makeBox(0.07, 0.08, 0.4, 0x335533, 0, 0, 0)); awp.add(makeBox(0.06, 0.08, 0.25, 0x335533, 0, -0.02, 0.3));
+        awp.mag = makeBox(0.04, 0.1, 0.06, 0x111111, 0, -0.1, -0.1); awp.add(awp.mag);
+        const awpB = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 8), new THREE.MeshLambertMaterial({color:0x111111}));
+        awpB.rotation.x = Math.PI/2; awpB.position.set(0, 0.03, -0.5); awp.add(awpB);
+        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.2, 8), new THREE.MeshLambertMaterial({color:0x000000}));
+        scope.rotation.x = Math.PI/2; scope.position.set(0, 0.1, 0); awp.add(scope);
+        awp.add(createHand(0.08, 0.08, 0.5, handColor, 0.15, -0.1, 0.2)); // Правая рука
+        awp.add(createHand(0.08, 0.08, 0.5, handColor, -0.2, -0.05, -0.15, -0.4)); // Левая рука
+        awp.userData = { name: "AWP", dmg: 200, rate: 1500, range: 200, type: 'gun', ammo: 10, maxAmmo: 10, reloadTime: 3.0, price: 3500, owned: false, sound: 'shoot_loud' };
+
+        weapons = [knife, usp, m4, deagle, ak, awp];
+        weapons.forEach(w => { w.visible = false; handGroup.add(w); });
+        currentWeaponIdx = 2; weapons[currentWeaponIdx].visible = true; updateWeaponUI();
+    }
+
+    function createMap() { /* ВАШ КОД */
+        const floorGeo = new THREE.PlaneGeometry(100, 100, 40, 40);
+        const pos = floorGeo.attributes.position;
+        for(let i=0; i < pos.count; i++) pos.setZ(i, Math.random() * 0.4);
+        floorGeo.computeVertexNormals();
+        const floor = new THREE.Mesh(floorGeo, new THREE.MeshLambertMaterial({ color: 0x223322 }));
+        floor.rotation.x = -Math.PI / 2; scene.add(floor);
+
+        const wMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const b1 = makeBox(100, 15, 2, 0x333333, 0, 7.5, -50);
+        const b2 = makeBox(100, 15, 2, 0x333333, 0, 7.5, 50);
+        const b3 = makeBox(2, 15, 100, 0x333333, -50, 7.5, 0);
+        const b4 = makeBox(2, 15, 100, 0x333333, 50, 7.5, 0);
+        scene.add(b1, b2, b3, b4); obstacles.push(b1, b2, b3, b4); 
+
+        createHouse(20, 20); createHouse(-20, -20); createHouse(15, -25);
+
+        for(let i=0; i<30; i++) {
+            const x = (Math.random() - 0.5) * 80; const z = (Math.random() - 0.5) * 80;
+            if (Math.abs(x)<8 && Math.abs(z)<8) continue;
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 5, 5), new THREE.MeshLambertMaterial({color:0x221100}));
+            trunk.position.set(x, 2.5, z); scene.add(trunk); obstacles.push(trunk);
+        }
+    }
+
+    function createHouse(x, z) { /* ВАШ КОД */
+        const w = 8, h = 5, d = 8; const wallColor = 0x443333;
+        const grp = new THREE.Group(); grp.position.set(x, h/2, z);
+        const b = makeBox(w, h, 1, wallColor, 0, 0, -d/2);
+        const l = makeBox(1, h, d, wallColor, -w/2, 0, 0);
+        const r = makeBox(1, h, d, wallColor, w/2, 0, 0);
+        const roof = makeBox(w+2, 0.5, d+2, 0x221111, 0, h/2, 0);
+        const f1 = makeBox(w/3, h, 1, wallColor, -w/3, 0, d/2);
+        const f2 = makeBox(w/3, h, 1, wallColor, w/3, 0, d/2);
+        grp.add(b); grp.add(l); grp.add(r); grp.add(roof); grp.add(f1); grp.add(f2); scene.add(grp);
+        
+        const offset = new THREE.Vector3(x, h/2, z);
+        obstacles.push(b.clone().translateX(offset.x).translateZ(offset.z)); 
+        obstacles.push(l.clone().translateX(offset.x).translateZ(offset.z));
+        obstacles.push(r.clone().translateX(offset.x).translateZ(offset.z));
+        obstacles.push(f1.clone().translateX(offset.x).translateZ(offset.z));
+        obstacles.push(f2.clone().translateX(offset.x).translateZ(offset.z));
+
+        const lootType = Math.random() > 0.5 ? 'hp' : 'ammo';
+        const lootColor = lootType === 'hp' ? 0xff0000 : 0xffff00;
+        const pickup = makeBox(0.8, 0.8, 0.8, lootColor, x, 1, z);
+        pickup.rotation.y = Math.random(); pickup.userData = { type: lootType, active: true };
+        pickups.push(pickup); scene.add(pickup);
+    }
+
+    // ВАШИ ФУНКЦИИ (buildShop, buyWeapon, buySkin, buyWeaponSkin) - (Не тронуты)
+    function setupShopTabs() { /* ВАШ КОД */ 
+        document.querySelectorAll('.shop-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.shop-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.shop-content').forEach(c => c.classList.remove('active'));
+                document.getElementById(tab.dataset.tab + '-content').classList.add('active');
+            });
+        });
+    }
+
+    function buildShop() { /* ВАШ КОД */
+        // --- WEAPON SHOP ---
+        const weaponContainer = document.getElementById('shop-items'); weaponContainer.innerHTML = '';
+        weapons.forEach((w, idx) => {
+            if (idx === 0 || idx === 1 || idx === 2) return; 
+            const d = w.userData;
+            const el = document.createElement('div');
+            el.className = 'shop-item ' + (d.owned ? 'owned' : 'locked');
+            el.innerHTML = `${d.name} <br> ${d.owned ? 'OWNED' : '$'+d.price}`;
+            el.onclick = () => buyWeapon(idx);
+            weaponContainer.appendChild(el);
+        });
+
+        // --- SKIN SHOP (Character) ---
+        const skinContainer = document.getElementById('skin-items'); skinContainer.innerHTML = '';
+        playerSkins.forEach((skin, idx) => {
+            const el = document.createElement('div');
+            const isCurrent = player.currentSkin === idx;
+            const handIndicator = `<span style="color:#${skin.gloveColor.toString(16).padStart(6, '0')}">■</span>`;
+            el.className = 'shop-item ' + (skin.owned ? (isCurrent ? 'owned' : '') : 'locked');
+            el.innerHTML = `${skin.name} ${handIndicator} <br> ${skin.owned ? (isCurrent ? 'EQUIPPED' : 'EQUIP') : '$'+skin.price}`;
+            el.onclick = () => buySkin(idx);
+            skinContainer.appendChild(el);
+        });
+
+        // --- WEAPON SKIN SHOP ---
+        const wskinContainer = document.getElementById('wskin-items'); wskinContainer.innerHTML = '';
+        weaponSkins.forEach((skin, idx) => {
+            const el = document.createElement('div');
+            const colorIndicator = `<span style="color:#${skin.color.toString(16).padStart(6, '0')}">●</span>`;
+            
+            const targetWeapon = weapons.find(w => w.userData.name === skin.weapon);
+            const canBuy = targetWeapon && targetWeapon.userData.owned;
+
+            el.className = 'shop-item ' + (skin.owned ? 'owned' : (canBuy ? 'locked' : 'disabled'));
+            el.innerHTML = `${skin.name} ${colorIndicator} <br> [${skin.weapon}] ${skin.owned ? 'OWNED' : '$'+skin.price}`;
+            if (canBuy) {
+                 el.onclick = () => buyWeaponSkin(idx);
+            } else {
+                 el.onclick = () => showMsg(`BUY ${skin.weapon} FIRST`);
+            }
+            wskinContainer.appendChild(el);
+        });
+
+        document.getElementById('close-shop').onclick = () => document.getElementById('shop-menu').style.display = 'none';
+    }
+
+    function buyWeapon(idx) { /* ВАШ КОД */
+        const wp = weapons[idx].userData;
+        if(wp.owned) {
+            weapons[currentWeaponIdx].visible = false; currentWeaponIdx = idx; weapons[currentWeaponIdx].visible = true;
+            updateWeaponUI(); document.getElementById('shop-menu').style.display = 'none';
+        } else {
+            if(player.money >= wp.price) {
+                player.money -= wp.price; wp.owned = true; document.getElementById('money').innerText = '$'+player.money; playSound('pick'); buildShop();
+            } else { showMsg("NOT ENOUGH MONEY"); }
+        }
+    }
+
+    function buySkin(idx) { /* ВАШ КОД */
+        const skin = playerSkins[idx];
+        if (skin.owned) {
+            applyPlayerSkin(idx);
+            document.getElementById('shop-menu').style.display = 'none';
+        } else {
+            if (player.money >= skin.price) {
+                player.money -= skin.price; skin.owned = true; document.getElementById('money').innerText = '$'+player.money; playSound('pick'); buildShop();
+            } else { showMsg("NOT ENOUGH MONEY"); }
+        }
+    }
+
+    function buyWeaponSkin(idx) { /* ВАШ КОД */
+        const skin = weaponSkins[idx];
+        if (skin.owned) {
+            applyWeaponSkin(skin.weapon, skin.color);
+            document.getElementById('shop-menu').style.display = 'none';
+        } else {
+             if (player.money >= skin.price) {
+                player.money -= skin.price; skin.owned = true; document.getElementById('money').innerText = '$'+player.money; playSound('pick'); buildShop();
+                applyWeaponSkin(skin.weapon, skin.color);
+            } else { showMsg("NOT ENOUGH MONEY"); }
+        }
+    }
+
+    // ВАШИ ФУНКЦИИ (reloadWeapon, shoot, checkCollision, spawnZombie, spawnBlood, showMsg, updateWeaponUI, playerHit, checkPickups) - (Не тронуты)
+    function reloadWeapon() { /* ВАШ КОД */
+        if(player.isReloading) return;
+        const wp = weapons[currentWeaponIdx].userData;
+        if(wp.type !== 'gun' || wp.ammo === wp.maxAmmo) return;
+        player.isReloading = true; player.reloadTimer = 0; player.reloadDuration = wp.reloadTime;
+        showMsg("RELOADING...");
+    }
+
+    function shoot() { /* ВАШ КОД */
+        if(!player.canShoot || player.isReloading) return;
+        const wpObj = weapons[currentWeaponIdx]; const wp = wpObj.userData;
+        if(wp.type === 'gun' && wp.ammo <= 0) { reloadWeapon(); return; }
+        playSound(wp.sound);
+        camera.rotation.x += 0.02; player.hand.position.z += 0.15;
+        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera( new THREE.Vector2(0,0), camera );
+        const intersects = raycaster.intersectObjects(zombies.map(z=>z), true); // Ищем в зомби
+        
+        if(intersects.length > 0 && intersects[0].distance < wp.range) {
+            const hitObj = intersects[0].object.parent;
+            if(hitObj && hitObj.userData.hp) {
+                
+                // *** СЕТЕВАЯ ЛОГИКА УРОНА/УБИЙСТВА ***
+                if (!isOnline || isHost) {
+                     hitObj.userData.hp -= wp.dmg; spawnBlood(intersects[0].point);
+                     if(hitObj.userData.hp <= 0) {
+                        scene.remove(hitObj); zombies = zombies.filter(z => z !== hitObj);
+                        player.money += 100; killCount++; document.getElementById('money').innerText = '$' + player.money; buildShop();
+                        if (isOnline && conn && conn.open) conn.send({ type: 'zombie_dead', id: hitObj.uuid, killer: 'player' });
+                    } else if (isOnline && conn && conn.open) {
+                        conn.send({ type: 'zombie_hit', id: hitObj.uuid, dmg: wp.dmg });
+                    }
+                } else if (!isHost && isOnline && conn && conn.open) {
+                    // Клиент сообщает хосту, что он попал
+                    conn.send({ type: 'shot_hit', id: hitObj.uuid, dmg: wp.dmg });
+                }
+                // *** КОНЕЦ СЕТЕВОЙ ЛОГИКИ ***
+            }
+        }
+        if(wp.type === 'gun') wp.ammo--;
+        updateWeaponUI(); player.canShoot = false; setTimeout(() => { player.canShoot = true; }, wp.rate);
+    }
+    
+    function checkCollision(pos) { /* ВАШ КОД */
+        const pBox = new THREE.Box3().setFromCenterAndSize(pos, new THREE.Vector3(0.5, 2, 0.5));
+        for(let o of obstacles) {
+            const oBox = new THREE.Box3().setFromObject(o);
+            if(pBox.intersectsBox(oBox)) return true;
+        }
+        return false;
+    }
+
+    function spawnZombie() { /* ВАШ КОД */
+        if(zombies.length >= 30) return;
+        const g = new THREE.Group();
+        
+        const skinData = zombieSkins[Math.floor(Math.random() * zombieSkins.length)];
+        const bodyColor = skinData.body;
+        const headColor = skinData.head;
+
+        const head = makeBox(0.25, 0.25, 0.25, headColor, 0, 1.25, 0); g.add(head);
+        const body = makeBox(0.4, 0.6, 0.2, bodyColor, 0, 0.8, 0); g.add(body);
+        
+        const lArm = makeBox(0.12, 0.6, 0.12, bodyColor, -0.3, 0.8, 0.2); lArm.rotation.x = -1.5; g.add(lArm);
+        const rArm = makeBox(0.12, 0.6, 0.12, bodyColor, 0.3, 0.8, 0.2); rArm.rotation.x = -1.5; g.add(rArm);
+        
+        g.add(makeBox(0.15, 0.7, 0.15, 0x222233, -0.15, 0.35, 0)); // Нога 1
+        g.add(makeBox(0.15, 0.7, 0.15, 0x222233, 0.15, 0.35, 0)); // Нога 2
+
+        let valid = false, pos = new THREE.Vector3();
+        for(let i=0; i<10; i++) {
+            const angle = Math.random() * Math.PI * 2; const dist = 20 + Math.random() * 20;
+            pos.set(camera.position.x + Math.cos(angle) * dist, 0, camera.position.z + Math.sin(angle) * dist);
+            if(!checkCollision(pos)) { valid = true; break; }
+        }
+        if(!valid) return;
+        g.position.copy(pos);
+        
+        let isBoss = (killCount > 0 && killCount % 20 === 0);
+        let hp = isBoss ? 400 + (wave*100) : 60 + (wave * 20);
+        let scale = isBoss ? 3.0 : 1.6;
+        g.scale.set(scale, scale, scale);
+        g.userData = { hp: hp, speed: (isBoss? 0.04 : 0.06) + (wave*0.002) };
+        scene.add(g); zombies.push(g);
+    }
+    
+    function spawnBlood(pos) { /* ВАШ КОД */
+        for(let i=0; i<5; i++) {
+            const b = makeBox(0.05, 0.05, 0.05, 0xaa0000, pos.x, pos.y, pos.z);
+            b.vel = new THREE.Vector3((Math.random()-0.5)*0.2, Math.random()*0.2, (Math.random()-0.5)*0.2);
+            b.life = 30; particles.push(b); scene.add(b);
+        }
+    }
+
+    function showMsg(txt) { /* ВАШ КОД */
+        const el = document.getElementById('shop-msg'); el.innerText = txt; el.style.opacity = 1;
+        setTimeout(() => el.style.opacity = 0, 2000);
+    }
+
+    function showOnlineMsg(txt, duration) { /* ВАШ КОД */
+        const el = document.getElementById('online-msg'); el.innerText = txt; el.style.opacity = 1;
+        setTimeout(() => el.style.opacity = 0, duration);
+    }
+
+    function updateWeaponUI() { /* ВАШ КОД */
+        const wp = weapons[currentWeaponIdx].userData;
+        document.getElementById('ammo').innerText = `${wp.name} : ${wp.type === 'gun' ? `${wp.ammo} / ∞` : '--'}`;
+    }
+
+    function playerHit(dmg) { /* ВАШ КОД */
+        player.hp -= dmg;
+        document.getElementById('health').innerText = "HP: " + Math.floor(player.hp);
+        const overlay = document.getElementById('damage-overlay');
+        overlay.style.opacity = 0.6; setTimeout(() => overlay.style.opacity = 0, 100);
+        if(player.hp <= 0) { alert("DEAD. KILLS: " + killCount); location.reload(); }
+    }
+
+    function checkPickups() { /* ВАШ КОД */
+        for(let i=0; i<pickups.length; i++) {
+            const p = pickups[i];
+            if(p.userData.active && p.position.distanceTo(camera.position) < 2) {
+                p.userData.active = false; p.visible = false; playSound('pick');
+                if(p.userData.type === 'hp') { player.hp = Math.min(100, player.hp + 25); showMsg("+25 HP"); }
+                else { 
+                    weapons.forEach(w => { if(w.userData.type === 'gun') w.userData.ammo = w.userData.maxAmmo; });
+                    showMsg("ALL AMMO REFILLED");
+                }
+                document.getElementById('health').innerText = "HP: " + Math.floor(player.hp);
+                updateWeaponUI();
+                setTimeout(() => { p.userData.active = true; p.visible = true; }, 30000);
+            }
+            p.rotation.y += 0.05;
+        }
+    }
+
+
+    // --- НОВАЯ СЕТЕВАЯ ЛОГИКА ---
+
+    function backToMain() {
+        if(peer) peer.destroy();
+        document.getElementById('connect-menu').style.display = 'none';
+        document.getElementById('menu').style.display = 'flex';
+    }
+
+    function resetMenu() {
+        if(peer) peer.destroy();
+        document.getElementById('host-panel').style.display = 'none';
+        document.getElementById('join-panel').style.display = 'none';
+        document.getElementById('role-select').style.display = 'block';
+        document.getElementById('conn-status').innerText = '...';
+    }
+
+    function setupMainMenu() {
+        document.getElementById('start-single-btn').addEventListener('click', () => {
+            isOnline = false;
+            startGame();
+        });
+
+        document.getElementById('start-online-btn').addEventListener('click', () => {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('connect-menu').style.display = 'flex'; // Показываем сетевое меню
+        });
+        
+        document.getElementById('confirm-join-btn').onclick = joinGame;
+    }
+
+    function initHost() {
+        document.getElementById('role-select').style.display = 'none';
+        document.getElementById('host-panel').style.display = 'block';
+        document.getElementById('conn-status').innerText = "Генерация кода...";
+        
+        // Генерируем 4-значный код
+        const code = Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('my-code').innerText = code;
+
+        peer = new Peer(APP_ID + code);
+        
+        peer.on('open', (id) => {
+            isHost = true;
+            document.getElementById('conn-status').innerText = "Ожидание игрока...";
+        });
+
+        peer.on('connection', (c) => {
+            conn = c;
+            handleConnection();
+        });
+
+        peer.on('error', (err) => { 
+            document.getElementById('conn-status').innerText = "Ошибка: " + err.type;
+            document.getElementById('conn-status').style.color = "red";
+        });
+    }
+
+    function initJoin() {
+        document.getElementById('role-select').style.display = 'none';
+        document.getElementById('join-panel').style.display = 'block';
+        // Клиент получает случайный ID (можно опустить, но лучше для надежности)
+        peer = new Peer(); 
+        peer.on('open', () => document.getElementById('conn-status').innerText = "Готов к вводу кода");
+    }
+
+    function joinGame() {
+        const code = document.getElementById('friend-code').value;
+        if (code.length !== 4) return;
+        document.getElementById('conn-status').innerText = "Подключение...";
+
+        conn = peer.connect(APP_ID + code);
+        
+        conn.on('open', () => {
+            isHost = false;
+            handleConnection();
+        });
+        
+        conn.on('error', () => document.getElementById('conn-status').innerText = "Не найдено...");
+
+        setTimeout(() => { if(!isOnline) document.getElementById('conn-status').innerText = "Нет ответа. Проверь код."; }, 8000);
+    }
+
+    function handleConnection() {
+        isOnline = true;
+        document.getElementById('conn-status').innerText = "СОЕДИНЕНИЕ УСТАНОВЛЕНО! Запуск...";
+        document.getElementById('conn-status').style.color = "lime";
+        
+        conn.on('data', (data) => {
+            // Прием позиции другого игрока
+            if(data.type === 'move') {
+                otherPlayerModel.position.set(data.x, data.y, data.z);
+                otherPlayerModel.rotation.y = data.rot;
+            }
+
+            // Клиент принимает состояние зомби от Хоста
+            if(data.type === 'zombies' && !isHost) {
+                updateClientZombies(data.list);
+            }
+
+            // Хост/Клиент принимает сигнал об убийстве зомби
+            if(data.type === 'zombie_dead') {
+                removeZombieByUUID(data.id);
+            }
+            
+            // Хост принимает попадание от Клиента (для синхронизации урона)
+            if (data.type === 'shot_hit' && isHost) {
+                 const zombie = zombies.find(z => z.uuid === data.id);
+                 if (zombie) {
+                    zombie.userData.hp -= data.dmg; 
+                    if(zombie.userData.hp <= 0) {
+                        scene.remove(zombie); zombies = zombies.filter(z => z !== zombie);
+                        player.money += 100; killCount++; buildShop();
+                        conn.send({ type: 'zombie_dead', id: zombie.uuid, killer: 'client' }); // Сообщаем клиенту об убийстве
+                    }
+                 }
+            }
+        });
+
+        conn.on('close', () => {
+             isOnline = false;
+             otherPlayerModel.position.y = -100;
+             showOnlineMsg("CONNECTION LOST!", 5000);
+        });
+
+        setTimeout(startGame, 1000);
+    }
+    
+    function updateClientZombies(list) {
+        // Удаляем зомби, которых нет в списке хоста
+        for(let i=zombies.length-1; i>=0; i--) {
+            if(!list.find(item => item.id === zombies[i].uuid)) {
+                 scene.remove(zombies[i]);
+                 zombies.splice(i, 1);
+            }
+        }
+        
+        // Обновляем позицию или создаем новых зомби
+        list.forEach(item => {
+            let zombie = zombies.find(z => z.uuid === item.id);
+            if (!zombie) {
+                 // Если зомби нет, создаем его (только на стороне клиента)
+                 const g = new THREE.Group(); g.uuid = item.id;
+                 const skinData = zombieSkins[Math.floor(Math.random() * zombieSkins.length)];
+                 const head = makeBox(0.25, 0.25, 0.25, skinData.head, 0, 1.25, 0); g.add(head);
+                 const body = makeBox(0.4, 0.6, 0.2, skinData.body, 0, 0.8, 0); g.add(body);
+                 g.add(makeBox(0.12, 0.6, 0.12, skinData.body, -0.3, 0.8, 0.2)); g.add(makeBox(0.12, 0.6, 0.12, skinData.body, 0.3, 0.8, 0.2));
+                 g.add(makeBox(0.15, 0.7, 0.15, 0x222233, -0.15, 0.35, 0)); g.add(makeBox(0.15, 0.7, 0.15, 0x222233, 0.15, 0.35, 0));
+                 
+                 let scale = item.isBoss ? 3.0 : 1.6; g.scale.set(scale, scale, scale);
+                 
+                 scene.add(g); zombies.push(g);
+                 zombie = g;
+            }
+            // Обновляем позицию и вращение
+            zombie.position.set(item.x, item.y, item.z);
+            zombie.rotation.y = item.rotY;
+        });
+    }
+
+    function removeZombieByUUID(uuid) {
+        const idx = zombies.findIndex(z => z.uuid === uuid);
+        if(idx > -1) {
+             scene.remove(zombies[idx]);
+             zombies.splice(idx, 1);
+             // На клиенте также нужно обновить HUD, так как деньги/киллы считает хост, а клиент просто удаляет.
+             // В идеале, хост должен присылать сигнал о получении денег.
+        }
+    }
+
+
+    function startGame() {
+        audioCtx.resume(); 
+        document.getElementById('menu').style.display = 'none';
+        document.getElementById('connect-menu').style.display = 'none';
+        document.getElementById('ui-layer').style.display = 'block';
+
+        if (isOnline) {
+            document.getElementById('p2p-status').innerText = isHost ? "HOST (ZOMBIE MASTER)" : "CLIENT";
+            otherPlayerModel.position.set(0, 0.9, 5); // Показываем второго игрока
+        } else {
+            document.getElementById('p2p-status').innerText = "SINGLE PLAYER";
+        }
+        
+        if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+        isPlaying = true; camera.position.set(0, 2, 0);
+    }
+    
+    // --- ЦИКЛ ANIMATE (ДОБАВЛЕНА СЕТЕВАЯ ЛОГИКА) ---
+    function animate() {
+        requestAnimationFrame(animate);
+        if(!isPlaying) return;
+        const delta = clock.getDelta(); const time = clock.getElapsedTime();
+
+        if(time - lastMoan > 5 + Math.random()*5) { if(zombies.length > 0) playSound('zombie'); lastMoan = time; }
+
+        if(player.isReloading) {
+            player.reloadTimer += delta;
+            const wp = weapons[currentWeaponIdx]; const progress = player.reloadTimer / player.reloadDuration;
+            wp.rotation.x = Math.sin(progress * Math.PI) * 1.5;
+            if(wp.mag) { if(progress < 0.5) wp.mag.position.y -= delta * 0.5; else if(progress > 0.6) wp.mag.position.y = -0.1 + (1-progress)*0.2; }
+            if(player.reloadTimer >= player.reloadDuration) {
+                player.isReloading = false; wp.userData.ammo = wp.userData.maxAmmo; wp.rotation.x = 0;
+                if(wp.mag) wp.mag.position.set(0, -0.1, -0.1); 
+                updateWeaponUI();
+            }
+        }
+
+        const dir = new THREE.Vector3(input.x, 0, input.y); dir.applyAxisAngle(new THREE.Vector3(0,1,0), camera.rotation.y);
+        if (player.onGround) { player.velocity.x *= 0.8; player.velocity.z *= 0.8; player.velocity.x += dir.x * CFG.speed; player.velocity.z += dir.z * CFG.speed; } 
+        else { player.velocity.x += dir.x * CFG.airControl; player.velocity.z += dir.z * CFG.airControl; }
+        player.velocity.y -= CFG.gravity;
+
+        const originalPos = camera.position.clone();
+        camera.position.x += player.velocity.x; if(checkCollision(camera.position)) { camera.position.x = originalPos.x; player.velocity.x = 0; }
+        camera.position.z += player.velocity.z; if(checkCollision(camera.position)) { camera.position.z = originalPos.z; player.velocity.z = 0; }
+        camera.position.y += player.velocity.y;
+        if(camera.position.y < 2) { camera.position.y = 2; player.velocity.y = 0; player.onGround = true; }
+
+        // --- СЕТЕВОЙ СИНХРОН: Отправка позиции ---
+        if (isOnline && conn && conn.open) {
+            conn.send({
+                type: 'move',
+                x: camera.position.x,
+                y: camera.position.y - 1.0, 
+                z: camera.position.z,
+                rot: camera.rotation.y
+            });
+        }
+
+        // --- ЛОГИКА ЗОМБИ (ТОЛЬКО ХОСТ ИЛИ ОДИНОЧНАЯ ИГРА) ---
+        if (!isOnline || isHost) {
+            if(time * 1000 > lastSpawn + spawnRate) {
+                spawnZombie(); lastSpawn = time * 1000; spawnRate = Math.max(500, spawnRate - 10);
+                document.getElementById('wave-info').innerText = "ALIVE: " + zombies.length;
+            }
+
+            zombies.forEach(z => {
+                const targetPos = otherPlayerModel.position.distanceTo(camera.position) < z.position.distanceTo(camera.position) ? otherPlayerModel.position : camera.position;
+                z.lookAt(targetPos.x, 0, targetPos.z);
+                const dist = z.position.distanceTo(targetPos);
+                if(dist > 1.6) {
+                    const oldPos = z.position.clone(); z.translateZ(z.userData.speed);
+                    if(checkCollision(z.position)) z.position.copy(oldPos);
+                    z.position.y = Math.abs(Math.sin(time * 5)) * 0.2;
+                } else if (dist < 1.6 && targetPos.y > 0) { playerHit(0.5); }
+            });
+            
+            // ХОСТ отправляет зомби клиенту
+             if (isHost && conn && conn.open) {
+                const zList = zombies.map(z => ({ 
+                    id: z.uuid, 
+                    x: z.position.x, 
+                    y: z.position.y,
+                    z: z.position.z, 
+                    rotY: z.rotation.y,
+                    isBoss: z.scale.x > 2.0 // Признак босса
+                }));
+                conn.send({ type: 'zombies', list: zList });
+             }
+        }
+        // --- КОНЕЦ ЛОГИКИ ЗОМБИ ---
+
+        if(!player.isReloading) {
+            const swayX = Math.sin(time * 5) * 0.02 * (input.x || input.y ? 1 : 0.1);
+            const swayY = Math.cos(time * 5) * 0.02 * (input.x || input.y ? 1 : 0.1);
+            player.hand.position.x = THREE.MathUtils.lerp(player.hand.position.x, 0.2 + swayX, 0.1);
+            player.hand.position.y = THREE.MathUtils.lerp(player.hand.position.y, -0.3 + swayY, 0.1);
+            player.hand.position.z = THREE.MathUtils.lerp(player.hand.position.z, -0.5, 0.1);
+        }
+
+        checkPickups();
+
+        for(let i=particles.length-1; i>=0; i--) {
+            particles[i].position.add(particles[i].vel); particles[i].life--;
+            if(particles[i].life <= 0) { scene.remove(particles[i]); particles.splice(i, 1); }
+        }
+        renderer.render(scene, camera);
+    }
+
+    // --- ИНИЦИАЛИЗАЦИЯ УПРАВЛЕНИЯ (ВАШ КОД, НЕ ТРОНУТ) ---
+    function setupInputs() { /* ВАШ КОД */
+        const zone = document.getElementById('joystick-zone');
+        const knob = document.getElementById('joystick-knob');
+
+        zone.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); joyTouchId = e.changedTouches[0].identifier; updateJoystick(e.changedTouches[0]); }, {passive: false});
+        zone.addEventListener('touchmove', (e) => { e.preventDefault(); e.stopPropagation(); for(let i=0; i<e.changedTouches.length; i++) if(e.changedTouches[i].identifier === joyTouchId) updateJoystick(e.changedTouches[i]); }, {passive: false});
+        zone.addEventListener('touchend', (e) => { input.x = 0; input.y = 0; knob.style.top = '40px'; knob.style.left = '40px'; });
+
+        function updateJoystick(touch) {
+            const rect = zone.getBoundingClientRect();
+            let dx = touch.clientX - (rect.left + rect.width/2); let dy = touch.clientY - (rect.top + rect.height/2);
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist > 40) { dx = (dx/dist) * 40; dy = (dy/dist) * 40; }
+            knob.style.left = (40 + dx) + 'px'; knob.style.top = (40 + dy) + 'px';
+            input.x = dx / 40; input.y = dy / 40;
+        }
+
+        document.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.btn') || e.target.closest('#joystick-zone') || e.target.closest('#shop-menu') || e.target.closest('#connect-menu')) return; // ИСПРАВЛЕНО: local-menu -> connect-menu
+            for(let i=0; i<e.touches.length; i++) {
+                const t = e.touches[i];
+                if (t.clientX > window.innerWidth / 2) {
+                    lookTouchId = t.identifier; input.lastLookX = t.clientX; input.lastLookY = t.clientY;
+                }
+            }
+        }, {passive: false});
+        
+        document.addEventListener('touchmove', (e) => {
+            for(let i=0; i<e.touches.length; i++) {
+                const t = e.touches[i];
+                if(t.identifier === lookTouchId) {
+                    const dx = t.clientX - input.lastLookX; const dy = t.clientY - input.lastLookY;
+                    camera.rotation.y -= dx * CFG.sens; camera.rotation.x -= dy * CFG.sens;
+                    camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+                    input.lastLookX = t.clientX; input.lastLookY = t.clientY;
+                }
+            }
+        }, {passive: false});
+
+        const btns = document.querySelectorAll('.btn');
+        btns.forEach(b => { 
+            b.addEventListener('touchstart', (e) => { e.stopPropagation(); e.preventDefault(); }, {passive:false}); 
+            b.addEventListener('touchmove', (e) => { e.stopPropagation(); e.preventDefault(); }, {passive:false}); 
+            b.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); }, {passive:false}); 
+        });
+
+        document.getElementById('btn-fire').addEventListener('touchstart', (e) => { input.fire = true; shoot(); });
+        document.getElementById('btn-fire').addEventListener('touchend', (e) => { input.fire = false; });
+        document.getElementById('btn-jump').addEventListener('touchstart', (e) => { if(player.onGround) { player.velocity.y = CFG.jumpForce; player.onGround = false; } });
+        document.getElementById('btn-switch').addEventListener('touchstart', (e) => { 
+            if(player.isReloading) return;
+            weapons[currentWeaponIdx].visible = false;
+            let start = currentWeaponIdx;
+            do { currentWeaponIdx = (currentWeaponIdx + 1) % weapons.length; } while(!weapons[currentWeaponIdx].userData.owned && currentWeaponIdx !== start);
+            weapons[currentWeaponIdx].visible = true; updateWeaponUI();
+        });
+        document.getElementById('btn-reload').addEventListener('touchstart', (e) => reloadWeapon());
+        document.getElementById('btn-shop').addEventListener('touchstart', (e) => { document.getElementById('shop-menu').style.display = 'flex'; buildShop(); });
+    }
+
+    window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+    init();
+</script>
+</body>
+</html>
